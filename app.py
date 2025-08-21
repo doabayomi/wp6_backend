@@ -2,16 +2,21 @@ import os
 from flask import Flask, request, jsonify
 from flask_sqlalchemy import SQLAlchemy
 from werkzeug.security import generate_password_hash, check_password_hash
+from flask_cors import CORS
 import re
+from dotenv import load_dotenv
+
+# Load the .env file
+load_dotenv()
 
 app = Flask(__name__)
-
+CORS(app)
 # Configure the PostgreSQL database
 # Replace 'your_user', 'your_password', 'your_host', 'your_port', and 'your_database'
 # with your actual PostgreSQL credentials.
 # Example for a local PostgreSQL: 'postgresql://user:password@localhost:5432/mydatabase'
 # app.config['SQLALCHEMY_DATABASE_URI'] = os.environ.get('DATABASE_URL', 'postgresql://user:password@localhost:5432/your_database')
-app.config['SQLALCHEMY_DATABASE_URI'] = os.environ.get('DATABASE_URL', 'sqlite:///database.db')
+app.config['SQLALCHEMY_DATABASE_URI'] = os.environ.get('DATABASE_URL')
 app.config['SQLALCHEMY_TRACK_MODIFICATIONS'] = False
 
 db = SQLAlchemy(app)
@@ -20,7 +25,8 @@ db = SQLAlchemy(app)
 class User(db.Model):
     id = db.Column(db.Integer, primary_key=True)
     email = db.Column(db.String(120), unique=True, nullable=False)
-    password_hash = db.Column(db.String(128), nullable=False)
+    fullname = db.Column(db.String(120), unique=False, nullable=False)
+    password_hash = db.Column(db.String(278), nullable=False)
 
     def __repr__(self):
         return f'<User {self.email}>'
@@ -51,9 +57,13 @@ def signup():
     data = request.get_json()
     email = data.get('email')
     password = data.get('password')
+    fullname = data.get('fullname')
 
     if not email or not password:
         return jsonify({'message': 'Email and password are required!'}), 400
+
+    if not fullname:
+        return jsonify({'message': 'Full name is required'}), 400
 
     if not is_valid_email(email):
         return jsonify({'message': 'Invalid email format!'}), 400
@@ -63,7 +73,7 @@ def signup():
         return jsonify({'message': 'User with this email already exists!'}), 409
 
     # Create new user
-    new_user = User(email=email)
+    new_user = User(email=email, fullname=fullname)
     new_user.set_password(password) # Hash the password
 
     try:
@@ -72,6 +82,7 @@ def signup():
         return jsonify({'message': 'User registered successfully!'}), 201
     except Exception as e:
         db.session.rollback()
+        print(e)
         return jsonify({'message': 'An error occurred during registration.', 'error': str(e)}), 500
 
 # --- Login Route ---
@@ -91,9 +102,11 @@ def login():
     if not user or not user.check_password(password):
         return jsonify({'message': 'Invalid email or password!'}), 401
 
-    return jsonify({'message': 'Login successful!'}), 200
+    return jsonify({
+    'message': 'Login successful!',
+    'fullname': user.fullname
+    }), 200
 
 # To run the app
 if __name__ == '__main__':
     app.run(debug=True) # Set debug=False in production
-
